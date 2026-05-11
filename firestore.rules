@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Private app data — read/write only by owner
+    match /users/{uid}/app_data/{doc} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Public profile — public read, owner write
+    match /users/{uid}/public_profile/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Matching profile — public read, owner write
+    match /users/{uid}/matching_profile/{doc} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Matching index — public read, owner write
+    match /matching_index/{language}/{macroId}/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Social: discoverable public profiles (top-level collection)
+    // Any authenticated user can write — enables client-side bot seeding
+    match /public_profiles/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Friend requests — recipient can read/delete, sender can write
+    match /friend_requests/{toUid}/from/{fromUid} {
+      allow read: if request.auth != null && request.auth.uid == toUid;
+      allow write: if request.auth != null
+        && (request.auth.uid == fromUid || request.auth.uid == toUid);
+    }
+
+    // Friendships — each side can read their own list; either side can write (for accept/remove)
+    match /friendships/{uid}/list/{friendUid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null
+        && (request.auth.uid == uid || request.auth.uid == friendUid);
+    }
+
+    // Group invitations — recipient can read/delete, any auth user can create (to invite)
+    match /group_invitations/{toUid}/from/{inviteId} {
+      allow read: if request.auth != null && request.auth.uid == toUid;
+      allow create, update: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.uid == toUid;
+    }
+
+    // Groups — publicly readable, authenticated users can create/update
+    match /groups/{groupId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null
+        && request.auth.uid == resource.data.creatorUid;
+
+      // Group members — publicly readable, authenticated users can write
+      match /members/{uid} {
+        allow read: if true;
+        allow write: if request.auth != null;
+      }
+
+      // Group messages — authenticated users can read and create; only author can delete
+      match /messages/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow delete: if request.auth != null
+          && request.auth.uid == resource.data.uid;
+        allow update: if false;
+      }
+    }
+  }
+}

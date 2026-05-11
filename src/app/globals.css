@@ -1,26 +1,111 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #09090b;
+  --s1: #111114;
+  --s2: #18181c;
+  --s3: #222228;
+  --s4: #2a2a32;
+  --border: #2e2e36;
+  --border2: #3c3c46;
+  --text: #eeeee8;
+  --muted: #606068;
+  --muted2: #888896;
+  --teal: #3fffc0;
+  --green: #d4f53c;
+  --red: #ff3f5e;
+  --orange: #ff8c2a;
+  --blue: #4aaeff;
+  --purple: #a855f7;
+  --pink: #f472b6;
+  --yellow: #fbbf24;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-s1: var(--s1);
+  --color-s2: var(--s2);
+  --color-s3: var(--s3);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-teal: var(--teal);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-orange: var(--orange);
+  --color-blue: var(--blue);
+  --color-purple: var(--purple);
+  --font-display: var(--font-bebas);
+  --font-sans: var(--font-dm-sans);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-dm-sans), 'DM Sans', sans-serif;
+  font-size: 15px;
+  overscroll-behavior: none;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+::-webkit-scrollbar { width: 0; height: 0; }
+
+input, textarea, select, button {
+  font-family: inherit;
 }
+
+.font-display {
+  font-family: var(--font-bebas), 'Bebas Neue', sans-serif;
+  letter-spacing: 0.05em;
+}
+
+/* Pill variants */
+.pill { display: inline-block; font-size: .59rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; letter-spacing: .04em; white-space: nowrap; }
+.pill-teal { background: rgba(63,255,192,.12); color: var(--teal); }
+.pill-green { background: rgba(212,245,60,.12); color: var(--green); }
+.pill-red { background: rgba(255,63,94,.12); color: var(--red); }
+.pill-orange { background: rgba(255,140,42,.12); color: var(--orange); }
+.pill-blue { background: rgba(74,174,255,.12); color: var(--blue); }
+.pill-purple { background: rgba(168,85,247,.12); color: var(--purple); }
+.pill-yellow { background: rgba(251,191,36,.12); color: var(--yellow); }
+.pill-dim { background: rgba(255,255,255,.07); color: var(--text); }
+
+/* Card */
+.card { background: var(--s1); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+
+/* Input */
+.field {
+  width: 100%;
+  background: var(--s2);
+  border: 1px solid var(--border2);
+  border-radius: 11px;
+  color: var(--text);
+  font-size: .88rem;
+  padding: 10px 12px;
+}
+.field:focus { outline: none; border-color: var(--green); }
+.field::placeholder { color: var(--muted); }
+
+/* Sheet overlay */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 50; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--s1); border-radius: 22px 22px 0 0; padding: 18px 18px 48px; width: 100%; max-height: 88dvh; overflow-y: auto; }
+.sheet-handle { width: 38px; height: 4px; background: var(--border2); border-radius: 2px; margin: 0 auto 16px; }
+
+/* Buttons */
+.btn-primary { display: block; width: 100%; padding: 13px; border-radius: 13px; border: none; background: var(--green); color: var(--bg); font-weight: 700; font-size: .9rem; cursor: pointer; }
+.btn-secondary { display: block; width: 100%; padding: 12px; border-radius: 13px; border: none; background: var(--s3); color: var(--muted2); font-size: .85rem; cursor: pointer; }
+.btn-danger { display: block; width: 100%; padding: 11px; border-radius: 13px; border: none; background: rgba(255,63,94,.1); color: var(--red); font-size: .82rem; cursor: pointer; }
+
+/* Range slider */
+input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; outline: none; cursor: pointer; background: var(--border2); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--bg); cursor: pointer; }
+
+/* Checkbox / toggle */
+.check-btn {
+  width: 24px; height: 24px; border-radius: 7px; border: 1.5px solid var(--border2);
+  background: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: .75rem; transition: all .15s; flex-shrink: 0;
+}
+.check-btn.done { background: var(--green); border-color: var(--green); color: var(--bg); font-weight: 700; }
