@@ -337,12 +337,12 @@ export function ProgramsView() {
                       ))}
                     </div>
                     {Array.from({ length: item.defaultSets ?? 3 }).map((_, si) => {
-                      const setLog = log?.sets?.[si] ?? {};
+                      const setLog = (log?.sets?.[si] ?? {}) as Partial<SetLog>;
                       return (
                         <div key={si} style={{ display: 'grid', gridTemplateColumns: '22px 1fr 1fr 1fr 32px', gap: 5, alignItems: 'center', marginBottom: 4 }}>
                           <div className="font-display" style={{ fontSize: '1rem', color: 'var(--muted)', textAlign: 'right' }}>{si + 1}</div>
                           {(['w', 'r', 'rpe'] as const).map((field) => (
-                            <input key={field} className="field" type="number" inputMode="decimal" placeholder="—" defaultValue={(setLog as SetLog)[field]?.toString() ?? ''} onBlur={(e) => updateSetLog(item.id, si, field, parseFloat(e.target.value))} style={{ textAlign: 'center', padding: '6px 3px', fontSize: '.82rem' }} />
+                            <input key={field} className="field" type="number" inputMode="decimal" placeholder="—" defaultValue={setLog[field]?.toString() ?? ''} onBlur={(e) => updateSetLog(item.id, si, field, parseFloat(e.target.value))} style={{ textAlign: 'center', padding: '6px 3px', fontSize: '.82rem' }} />
                           ))}
                           <button className={`check-btn ${setLog.done ? 'done' : ''}`} onClick={() => updateSetLog(item.id, si, 'done', !(setLog.done ?? false))}>{setLog.done ? '✓' : ''}</button>
                         </div>
