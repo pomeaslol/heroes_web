@@ -26,10 +26,30 @@ export const GOAL_POINTS: Record<GoalType, number> = {
   life: 1000,
 };
 
+function getCurrentMondayKey(): string {
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  return monday.toISOString().split('T')[0];
+}
+
+export function computeCurrentDone(goal: Goal): boolean {
+  const today = new Date().toISOString().split('T')[0];
+  if (goal.type === 'daily') {
+    return goal.history.some((h) => h.date === today && h.done);
+  }
+  if (goal.type === 'weekly') {
+    const weekStart = getCurrentMondayKey();
+    return goal.history.some((h) => h.date >= weekStart && h.done);
+  }
+  return goal.done;
+}
+
 export function computeGoalScore(goal: Goal): number {
   const points = GOAL_POINTS[goal.type];
+  const done = computeCurrentDone(goal);
   if (goal.type === 'daily' || goal.type === 'weekly') {
-    return goal.done ? points : -points;
+    return done ? points : -points;
   }
-  return goal.done ? points : 0;
+  return done ? points : 0;
 }

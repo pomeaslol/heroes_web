@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useAppStore } from '@/lib/store/app-store';
 import { signOutUser } from '@/lib/firebase/auth';
 import { computeDomainScore, Domain } from '@/models/domain';
-import { Goal, GoalType } from '@/models/goal';
+import { Goal, GoalType, computeCurrentDone } from '@/models/goal';
 import { AddDomainModal } from './AddDomainModal';
 import { AddGoalModal } from './AddGoalModal';
 
@@ -53,9 +53,12 @@ export function Dashboard() {
         ...d,
         goals: d.goals.map((g) => {
           if (g.id !== goalId) return g;
-          const done = !g.done;
-          const history = g.history.filter((h) => h.date !== today);
-          return { ...g, done, history: [...history, { date: today, done }] };
+          if (g.type === 'daily' || g.type === 'weekly') {
+            const newDone = !computeCurrentDone(g);
+            const history = g.history.filter((h) => h.date !== today);
+            return { ...g, history: [...history, { date: today, done: newDone }] };
+          }
+          return { ...g, done: !g.done };
         }),
       };
     });
@@ -143,14 +146,14 @@ export function Dashboard() {
                         <button
                           onClick={() => handleToggleGoal(domain.id, goal.id)}
                           className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                            goal.done
+                            computeCurrentDone(goal)
                               ? 'bg-green-500 border-green-500 text-white'
                               : 'border-gray-300 hover:border-violet-400'
                           }`}
                         >
-                          {goal.done && <span className="text-xs">✓</span>}
+                          {computeCurrentDone(goal) && <span className="text-xs">✓</span>}
                         </button>
-                        <span className={goal.done ? 'line-through text-gray-400' : ''}>{goal.label}</span>
+                        <span className={computeCurrentDone(goal) ? 'line-through text-gray-400' : ''}>{goal.label}</span>
                         <span className="ml-auto text-xs text-gray-300 capitalize">{goal.type}</span>
                         <button
                           onClick={() => handleDeleteGoal(domain.id, goal.id)}
