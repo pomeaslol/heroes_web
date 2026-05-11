@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useAppStore } from '@/lib/store/app-store';
 import { signOutUser } from '@/lib/firebase/auth';
 import { computeDomainScore, Domain } from '@/models/domain';
@@ -81,7 +82,7 @@ export function Dashboard() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 shadow-sm">
-        <h1 className="text-xl font-bold text-violet-700">Hero</h1>
+        <Image src="/logo.png" alt="Hero" width={40} height={40} priority />
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-500">{user?.displayName}</span>
           <button
