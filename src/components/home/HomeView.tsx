@@ -7,6 +7,7 @@ import { loadFeedPosts, toggleLike, addComment, loadComments, deleteFeedPost } f
 import type { Friend, PublicProfileDoc } from '@/models/social';
 import type { FeedPost, FeedComment } from '@/models/feed';
 import { DayLog } from '@/models/day-log';
+import { ChatView } from '@/components/chat/ChatView';
 
 const MACRO_FILTERS = [
   { id: 'all',        label: 'Tout',        icon: '⚡' },
@@ -415,6 +416,7 @@ export function HomeView() {
   const appData     = useAppStore(s => s.appData);
   const currentView = useAppStore(s => s.currentView);
 
+  const [showChat,       setShowChat]       = useState(false);
   const [showSearch,     setShowSearch]     = useState(false);
   const [searchQuery,    setSearchQuery]    = useState('');
   const [searchResults,  setSearchResults]  = useState<PublicProfileDoc[]>([]);
@@ -509,8 +511,14 @@ export function HomeView() {
   return (
     <div style={{ paddingBottom: 24 }}>
       {/* ── Header ─────────────────────────────────────────── */}
-      <div style={{ padding: '12px 14px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ padding: '12px 14px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div className="font-display" style={{ fontSize: '1.3rem', flex: 1, letterSpacing: '.1em' }}>Feed</div>
+        <button
+          onClick={() => setShowChat(true)}
+          style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', color: 'var(--muted)', cursor: 'pointer', fontSize: '.9rem', display: 'flex', alignItems: 'center', gap: 6 }}
+        >
+          💬
+        </button>
         <button
           onClick={() => { setShowSearch(s => !s); setSearchQuery(''); setSearchResults([]); }}
           style={{ background: showSearch ? 'rgba(200,16,46,.12)' : 'var(--s2)', border: `1px solid ${showSearch ? 'rgba(200,16,46,.4)' : 'var(--border)'}`, borderRadius: 10, padding: '8px 12px', color: showSearch ? 'var(--primary)' : 'var(--muted)', cursor: 'pointer', fontSize: '.9rem' }}
@@ -656,6 +664,14 @@ export function HomeView() {
       ))}
 
       {/* Modals */}
+      {showChat && (
+        <ChatView
+          myUid={user?.uid ?? ''}
+          myName={myName}
+          friends={friends}
+          onClose={() => setShowChat(false)}
+        />
+      )}
       {viewingFriend && (
         <FriendProfileModal friend={viewingFriend} onClose={() => setViewingFriend(null)} />
       )}
