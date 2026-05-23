@@ -59,6 +59,10 @@ export async function loadComments(postId: string): Promise<FeedComment[]> {
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<FeedComment, 'id'>) }));
 }
 
+export async function updateFeedPost(postId: string, updates: Partial<import('@/models/feed').FeedPost>): Promise<void> {
+  await updateDoc(doc(db, 'feed_posts', postId), clean(updates));
+}
+
 export async function deleteFeedPost(postId: string): Promise<void> {
   await deleteDoc(doc(db, 'feed_posts', postId));
 }

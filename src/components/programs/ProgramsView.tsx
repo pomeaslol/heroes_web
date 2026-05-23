@@ -5,6 +5,7 @@ import { useAppStore } from '@/lib/store/app-store';
 import { Program, ProgramCategory, ProgramBlock, ProgramItem, TrackingType, CATEGORY_META } from '@/models/program';
 import { DayLog, BlockLog, ItemLog, SetLog } from '@/models/day-log';
 import { publishFeedPost } from '@/lib/firebase/feed';
+import type { FeedPost } from '@/models/feed';
 
 const PALETTE = ['#C8102E', '#3fffc0', '#ff8c2a', '#4aaeff', '#a855f7', '#f472b6', '#fbbf24', '#22c55e'];
 const ICONS = ['💪', '🥗', '🧘', '📚', '🎨', '⚡', '🏃', '🏋️', '🥊', '🧠', '✍️', '🎵', '🏊', '🚴', '🧗', '⚽'];
@@ -105,6 +106,7 @@ export function ProgramsView() {
   const updateProgram = useAppStore((s) => s.updateProgram);
   const deleteProgram = useAppStore((s) => s.deleteProgram);
   const addLog        = useAppStore((s) => s.addLog);
+  const updateLog     = useAppStore((s) => s.updateLog);
 
   const [screen,          setScreen]          = useState<Screen>('list');
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
@@ -677,6 +679,8 @@ export function ProgramsView() {
               likes: [],
               commentCount: 0,
               createdAt: new Date().toISOString(),
+            }).then(postId => {
+              updateLog(finalLog.id, { feedPostId: postId });
             }).catch(console.error);
           }
           setPendingLog(null);

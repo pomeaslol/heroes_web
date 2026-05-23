@@ -33,4 +33,5 @@ export interface DayLog {
   completedAt?: string;
   note?: string;
   isPublic?: boolean;
+  feedPostId?: string; // Firestore feed_posts doc ID if published
 }

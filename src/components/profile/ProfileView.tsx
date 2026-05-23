@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAppStore } from '@/lib/store/app-store';
 import { RadarChart, RadarOverlay } from './RadarChart';
 import { Domain } from '@/models/domain';
 import { Goal, GoalType, GOAL_XP, computeCurrentDone, computeTotalXP, computeLevelInfo } from '@/models/goal';
 import { DayLog } from '@/models/day-log';
+import { deleteFeedPost, updateFeedPost, publishFeedPost } from '@/lib/firebase/feed';
+import { getFriends } from '@/lib/firebase/social';
 
 // ─── Activity History sub-tab ─────────────────────────────────────────────────
 function formatLogDate(log: DayLog): string {
@@ -20,19 +22,54 @@ function formatLogDate(log: DayLog): string {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
-function ActivityHistory() {
+function ActivityHistory({ uid }: { uid: string | undefined }) {
   const logs      = useAppStore(s => s.appData?.logs ?? []);
   const updateLog = useAppStore(s => s.updateLog);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const deleteLog = useAppStore(s => s.deleteLog);
+  const [expandedId,  setExpandedId]  = useState<string | null>(null);
+  const [confirmDel,  setConfirmDel]  = useState<string | null>(null);
+  const [editingLog,  setEditingLog]  = useState<DayLog | null>(null);
+  const [editPublic,  setEditPublic]  = useState(true);
+  const [editExcluded, setEditExcluded] = useState<Set<string>>(new Set());
 
   const sorted = useMemo(() => [...logs].sort((a, b) => (b.completedAt ?? b.date).localeCompare(a.completedAt ?? a.date)), [logs]);
+
+  function openEdit(log: DayLog) {
+    setEditingLog(log);
+    setEditPublic(log.isPublic !== false);
+    setEditExcluded(new Set(
+      log.blocks.flatMap(b => b.items).filter(i => i.isPublic === false).map(i => i.itemId)
+    ));
+  }
+
+  async function saveEdit() {
+    if (!editingLog) return;
+    const updatedBlocks = editingLog.blocks.map(b => ({
+      ...b,
+      items: b.items.map(i => ({ ...i, isPublic: !editExcluded.has(i.itemId) })),
+    }));
+    const updatedLog: DayLog = { ...editingLog, blocks: updatedBlocks, isPublic: editPublic };
+    updateLog(editingLog.id, { isPublic: editPublic, blocks: updatedBlocks });
+    if (editingLog.feedPostId) {
+      updateFeedPost(editingLog.feedPostId, { log: updatedLog }).catch(console.error);
+    }
+    setEditingLog(null);
+  }
+
+  async function handleDelete(log: DayLog) {
+    deleteLog(log.id);
+    if (log.feedPostId) {
+      deleteFeedPost(log.feedPostId).catch(console.error);
+    }
+    setConfirmDel(null);
+  }
 
   if (sorted.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--muted)' }}>
         <div style={{ fontSize: '3rem', marginBottom: 12 }}>🏃</div>
         <div style={{ fontWeight: 700, fontSize: '.9rem', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Aucune séance</div>
-        <div style={{ fontSize: '.78rem' }}>Lance ta première séance depuis l'onglet Workout</div>
+        <div style={{ fontSize: '.78rem' }}>Lance ta première séance depuis l'onglet Séances</div>
       </div>
     );
   }
@@ -40,29 +77,43 @@ function ActivityHistory() {
   return (
     <div style={{ paddingBottom: 24 }}>
       {sorted.map(log => {
-        const expanded = expandedId === log.id;
-        const isPublic = log.isPublic !== false;
-        const allItems = log.blocks.flatMap(b => b.items);
-        const doneSets = allItems.flatMap(i => i.sets ?? []).filter(s => s.done);
-        const totalKg  = doneSets.reduce((n, s) => n + (s.w ?? 0) * (s.r ?? 1), 0);
-        const exoNames = allItems.filter(i => i.name && i.sets && i.sets.length > 0).map(i => i.name!);
+        const expanded  = expandedId === log.id;
+        const isPublic  = log.isPublic !== false;
+        const allItems  = log.blocks.flatMap(b => b.items);
+        const doneSets  = allItems.flatMap(i => i.sets ?? []).filter(s => s.done);
+        const totalKg   = doneSets.reduce((n, s) => n + (s.w ?? 0) * (s.r ?? 1), 0);
+        const exoNames  = allItems.filter(i => i.name && i.sets && i.sets.length > 0).map(i => i.name!);
         const checkboxItems = allItems.filter(i => i.name && (!i.sets || i.sets.length === 0) && i.done);
+
         return (
           <div key={log.id} className="card" style={{ margin: '0 12px 10px' }}>
-            {/* Collapsed header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px 8px' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px 8px' }}>
               <div style={{ width: 36, height: 36, borderRadius: 9, background: `${log.programColor}20`, border: `1px solid ${log.programColor}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>{log.programIcon}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: '.85rem', textTransform: 'uppercase', letterSpacing: '.03em' }}>{log.programName}</div>
                 <div style={{ fontSize: '.6rem', color: 'var(--muted)', marginTop: 1 }}>{formatLogDate(log)}</div>
               </div>
-              <button onClick={() => updateLog(log.id, { isPublic: !isPublic })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.8rem', padding: '3px 5px', color: isPublic ? 'var(--green)' : 'var(--muted)', flexShrink: 0 }}>
+              {/* Visibility toggle */}
+              <button
+                onClick={() => openEdit(log)}
+                title={isPublic ? 'Publié · Modifier la visibilité' : 'Privé · Rendre public'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.8rem', padding: '3px 5px', color: isPublic ? 'var(--green)' : 'var(--muted)', flexShrink: 0 }}
+              >
                 {isPublic ? '🌐' : '🔒'}
               </button>
+              {/* Delete */}
+              <button
+                onClick={() => setConfirmDel(log.id)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.75rem', padding: '3px 5px', color: 'rgba(255,255,255,.2)', flexShrink: 0 }}
+              >
+                🗑
+              </button>
+              {/* Expand */}
               <button onClick={() => setExpandedId(expanded ? null : log.id)} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '.9rem', padding: '0 4px', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }}>›</button>
             </div>
 
-            {/* Exercise names (always visible) */}
+            {/* Exercise chips */}
             {exoNames.length > 0 && (
               <div style={{ padding: '0 14px 8px', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                 {exoNames.map((name, i) => (
@@ -92,7 +143,10 @@ function ActivityHistory() {
                     {block.items.map(item => (
                       <div key={item.itemId} style={{ marginBottom: 10 }}>
                         {item.name && (
-                          <div style={{ fontSize: '.78rem', fontWeight: 700, marginBottom: 5, color: 'var(--text)' }}>{item.name}</div>
+                          <div style={{ fontSize: '.78rem', fontWeight: 700, marginBottom: 5, color: item.isPublic === false ? 'var(--muted)' : 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {item.name}
+                            {item.isPublic === false && <span style={{ fontSize: '.55rem', background: 'var(--s2)', borderRadius: 4, padding: '1px 5px', color: 'var(--muted)' }}>Privé</span>}
+                          </div>
                         )}
                         {item.sets && item.sets.length > 0 && (
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.72rem' }}>
@@ -129,9 +183,73 @@ function ActivityHistory() {
                 )}
               </div>
             )}
+
+            {/* Delete confirm bar */}
+            {confirmDel === log.id && (
+              <div style={{ borderTop: '1px solid rgba(200,16,46,.3)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(200,16,46,.06)' }}>
+                <div style={{ flex: 1, fontSize: '.76rem', color: 'var(--muted)' }}>Supprimer cette séance ?{log.feedPostId ? ' (retirera du feed)' : ''}</div>
+                <button onClick={() => handleDelete(log)} style={{ padding: '5px 12px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 7, fontSize: '.72rem', fontWeight: 700, cursor: 'pointer' }}>Oui</button>
+                <button onClick={() => setConfirmDel(null)} style={{ padding: '5px 10px', background: 'var(--s2)', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 7, fontSize: '.72rem', cursor: 'pointer' }}>Non</button>
+              </div>
+            )}
           </div>
         );
       })}
+
+      {/* ── Edit visibility modal ──────────────────────────────── */}
+      {editingLog && (
+        <div className="overlay" onClick={e => { if (e.target === e.currentTarget) setEditingLog(null); }}>
+          <div className="sheet" style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+            <div className="sheet-handle" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${editingLog.programColor}20`, border: `1px solid ${editingLog.programColor}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>{editingLog.programIcon}</div>
+              <div>
+                <div className="font-display" style={{ fontSize: '1.1rem', textTransform: 'uppercase', letterSpacing: '.06em' }}>{editingLog.programName}</div>
+                <div style={{ fontSize: '.62rem', color: 'var(--muted)' }}>{formatLogDate(editingLog)}</div>
+              </div>
+            </div>
+
+            {/* Public toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--s2)', borderRadius: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '.84rem' }}>Publié dans le feed</div>
+                <div style={{ fontSize: '.65rem', color: 'var(--muted)', marginTop: 2 }}>Visible par tes amis</div>
+              </div>
+              <button onClick={() => setEditPublic(v => !v)} style={{ width: 46, height: 26, borderRadius: 13, background: editPublic ? 'var(--green)' : 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', cursor: 'pointer', position: 'relative', flexShrink: 0, padding: 0, transition: 'background .2s' }}>
+                <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: editPublic ? 22 : 3, transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+              </button>
+            </div>
+
+            {/* Exercise visibility */}
+            {editPublic && (() => {
+              const allItems = editingLog.blocks.flatMap(b => b.items).filter(i => i.name);
+              if (allItems.length === 0) return null;
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: '.68rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Exercices visibles</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {allItems.map(item => {
+                      const included = !editExcluded.has(item.itemId);
+                      return (
+                        <button key={item.itemId} onClick={() => {
+                          const ns = new Set(editExcluded);
+                          if (ns.has(item.itemId)) ns.delete(item.itemId); else ns.add(item.itemId);
+                          setEditExcluded(ns);
+                        }} style={{ padding: '6px 11px', borderRadius: 8, border: included ? '1.5px solid var(--green)' : '1px solid var(--border)', background: included ? 'rgba(34,197,94,.08)' : 'var(--s2)', color: included ? 'var(--green)' : 'var(--muted)', fontSize: '.74rem', fontWeight: 600, cursor: 'pointer' }}>
+                          {included ? '✓ ' : ''}{item.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <button className="btn-primary" onClick={saveEdit}>Enregistrer</button>
+            <button className="btn-secondary" style={{ marginTop: 6 }} onClick={() => setEditingLog(null)}>Annuler</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -152,10 +270,8 @@ const GOAL_TYPE_META: Record<GoalType, GoalTypeMeta> = {
 };
 const OBJECTIVE_TYPES: GoalType[] = ['immediate', 'short', 'medium', 'long', 'life'];
 
-// Level badge colors by level
 const LEVEL_COLORS = ['', '#606068', '#4aaeff', '#22c55e', '#3fffc0', '#ff8c2a', '#a855f7', '#f472b6', '#fbbf24'];
 
-// ─── Historical domain level (for radar comparison) ──────────────────────────
 function computeHistoricalDomainLevel(domain: Domain, daysAgo: number): number {
   const target = new Date();
   target.setDate(target.getDate() - daysAgo);
@@ -167,7 +283,6 @@ function computeHistoricalDomainLevel(domain: Domain, daysAgo: number): number {
   return computeLevelInfo(histXP).level;
 }
 
-// ─── Compact activity sparkline ───────────────────────────────────────────────
 function ActivitySparkline({ logs }: { logs: DayLog[] }) {
   const DAYS = 90;
   const data = useMemo(() => {
@@ -212,7 +327,6 @@ function ActivitySparkline({ logs }: { logs: DayLog[] }) {
   );
 }
 
-// ─── XP Bar ───────────────────────────────────────────────────────────────────
 function XpBar({ progress }: { progress: number }) {
   return (
     <div style={{ height: 5, background: 'rgba(255,255,255,.08)', borderRadius: 99, overflow: 'hidden', flex: 1 }}>
@@ -221,7 +335,6 @@ function XpBar({ progress }: { progress: number }) {
   );
 }
 
-// ─── Level badge for domains ──────────────────────────────────────────────────
 function DomainLevelBadge({ goals }: { goals: Goal[] }) {
   const xp  = computeTotalXP(goals);
   const lvl = computeLevelInfo(xp);
@@ -234,72 +347,9 @@ function DomainLevelBadge({ goals }: { goals: Goal[] }) {
   );
 }
 
-// ─── Quest row ────────────────────────────────────────────────────────────────
-function QuestRow({ goal, domain, onToggle, onDelete, showPublicToggle, isPublic, onPublicToggle }: {
-  goal: Goal; domain: Domain;
-  onToggle: () => void; onDelete: () => void;
-  showPublicToggle?: boolean; isPublic?: boolean; onPublicToggle?: () => void;
-}) {
-  const isDone = computeCurrentDone(goal);
-  const meta   = GOAL_TYPE_META[goal.type];
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '1px solid rgba(255,255,255,.04)' }}>
-      <button className={`check-btn ${isDone ? 'done' : ''}`} onClick={onToggle}>{isDone ? '✓' : ''}</button>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '.85rem', fontWeight: 600, textDecoration: isDone ? 'line-through' : 'none', color: isDone ? 'var(--muted)' : 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{goal.label}</div>
-        <div style={{ fontSize: '.62rem', color: 'var(--muted)', marginTop: 1 }}>{domain.emoji} {domain.name}</div>
-      </div>
-      <div style={{ fontSize: '.68rem', fontWeight: 700, color: isDone ? 'var(--muted)' : meta.color, flexShrink: 0 }}>+{GOAL_XP[goal.type]} XP</div>
-      {showPublicToggle && (
-        <button onClick={onPublicToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.7rem', padding: '0 2px', color: isPublic ? 'var(--teal)' : 'var(--muted)', opacity: 0.75 }}>{isPublic ? '👁' : '🔒'}</button>
-      )}
-      <button onClick={onDelete} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '.9rem', padding: '0 2px' }}>×</button>
-    </div>
-  );
-}
-
-// ─── Collapsible quest section ────────────────────────────────────────────────
-function QuestSection({ title, icon, color, quests, onAdd, children }: {
-  title: string; icon: string; color: string;
-  quests: { done: number; total: number };
-  onAdd?: () => void; children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(true);
-  const allDone = quests.total > 0 && quests.done === quests.total;
-  return (
-    <div className="card" style={{ margin: '0 12px 8px' }}>
-      <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)' }}>
-        <span style={{ fontSize: '1rem' }}>{icon}</span>
-        <div style={{ flex: 1, textAlign: 'left' }}>
-          <div style={{ fontWeight: 700, fontSize: '.82rem', color, textTransform: 'uppercase', letterSpacing: '.06em' }}>{title}</div>
-          <div style={{ fontSize: '.62rem', color: allDone ? 'var(--green)' : 'var(--muted)', marginTop: 1 }}>
-            {quests.done}/{quests.total} {allDone ? '— tout accompli ✓' : ''}
-          </div>
-        </div>
-        {quests.total > 0 && (
-          <div style={{ fontSize: '.75rem', fontWeight: 800, color: allDone ? 'var(--green)' : color }}>{Math.round(quests.done / quests.total * 100)}%</div>
-        )}
-        <span style={{ fontSize: '.8rem', color: 'var(--muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }}>›</span>
-      </button>
-      {open && (
-        <>
-          {quests.total === 0 && <div style={{ padding: '8px 14px 12px', fontSize: '.78rem', color: 'var(--muted)' }}>Aucune quête — ajoute-en une !</div>}
-          {children}
-          {onAdd && (
-            <div style={{ padding: '10px 14px' }}>
-              <button onClick={onAdd} style={{ fontSize: '.78rem', color, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>+ Ajouter</button>
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Compact quests ───────────────────────────────────────────────────────────
-type QuestEntry = { domain: Domain; goal: Goal; isDone: boolean };
 function CompactQuests({ dailyQuests, weeklyQuests, onToggle, onDelete, onAddDaily, onAddWeekly, socialEnabled, onPublicToggle }: {
-  dailyQuests: QuestEntry[]; weeklyQuests: QuestEntry[];
+  dailyQuests: { domain: Domain; goal: Goal; isDone: boolean }[];
+  weeklyQuests: { domain: Domain; goal: Goal; isDone: boolean }[];
   onToggle: (domainId: string, goalId: string) => void;
   onDelete: (domainId: string, goalId: string) => void;
   onAddDaily: () => void; onAddWeekly: () => void;
@@ -308,14 +358,12 @@ function CompactQuests({ dailyQuests, weeklyQuests, onToggle, onDelete, onAddDai
 }) {
   const [tab, setTab] = useState<'daily' | 'weekly'>('daily');
   const quests = tab === 'daily' ? dailyQuests : weeklyQuests;
-  const doneCnt = quests.filter(q => q.isDone).length;
-  const dailyDone = dailyQuests.filter(q => q.isDone).length;
+  const dailyDone  = dailyQuests.filter(q => q.isDone).length;
   const weeklyDone = weeklyQuests.filter(q => q.isDone).length;
   const color = tab === 'daily' ? '#ff8c2a' : '#a855f7';
 
   return (
     <div className="card" style={{ margin: '8px 12px' }}>
-      {/* Mini tabs */}
       <div style={{ display: 'flex', padding: '10px 10px 0', gap: 4 }}>
         {([['daily', `⚡ Jour`, `${dailyDone}/${dailyQuests.length}`, '#ff8c2a'], ['weekly', `📅 Semaine`, `${weeklyDone}/${weeklyQuests.length}`, '#a855f7']] as const).map(([id, label, count, c]) => (
           <button key={id} onClick={() => setTab(id)} style={{ flex: 1, padding: '7px 4px', borderRadius: 8, border: tab === id ? `1.5px solid ${c}` : '1.5px solid transparent', background: tab === id ? `${c}12` : 'none', color: tab === id ? c : 'var(--muted)', fontSize: '.68rem', fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.05em' }}>
@@ -323,27 +371,21 @@ function CompactQuests({ dailyQuests, weeklyQuests, onToggle, onDelete, onAddDai
           </button>
         ))}
       </div>
-
-      {/* Quest rows — compact */}
       <div style={{ padding: '6px 0' }}>
         {quests.length === 0 && (
           <div style={{ padding: '10px 14px', fontSize: '.76rem', color: 'var(--muted)' }}>Aucune quête — ajoute-en une !</div>
         )}
-        {quests.map(({ domain, goal, isDone }) => {
-          return (
-            <div key={goal.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: '1px solid rgba(255,255,255,.04)' }}>
-              <button className={`check-btn ${isDone ? 'done' : ''}`} onClick={() => onToggle(domain.id, goal.id)} style={{ width: 22, height: 22, minWidth: 22, fontSize: '.7rem' }}>{isDone ? '✓' : ''}</button>
-              <span style={{ fontSize: '.95rem', flexShrink: 0 }}>{domain.emoji}</span>
-              <div style={{ flex: 1, minWidth: 0, fontSize: '.8rem', fontWeight: 600, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isDone ? 'line-through' : 'none', color: isDone ? 'var(--muted)' : 'var(--text)' }}>{goal.label}</div>
-              <span style={{ fontSize: '.58rem', fontWeight: 800, color: isDone ? 'var(--muted)' : color, flexShrink: 0 }}>+{GOAL_XP[goal.type]}</span>
-              {socialEnabled && <button onClick={() => onPublicToggle(domain.id, goal.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.7rem', padding: '0 2px', color: goal.isPublic ? 'var(--teal)' : 'var(--muted)', opacity: 0.6, flexShrink: 0 }}>{goal.isPublic ? '👁' : '🔒'}</button>}
-              <button onClick={() => onDelete(domain.id, goal.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.2)', cursor: 'pointer', fontSize: '.9rem', padding: '0 1px', flexShrink: 0 }}>×</button>
-            </div>
-          );
-        })}
+        {quests.map(({ domain, goal, isDone }) => (
+          <div key={goal.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: '1px solid rgba(255,255,255,.04)' }}>
+            <button className={`check-btn ${isDone ? 'done' : ''}`} onClick={() => onToggle(domain.id, goal.id)} style={{ width: 22, height: 22, minWidth: 22, fontSize: '.7rem' }}>{isDone ? '✓' : ''}</button>
+            <span style={{ fontSize: '.95rem', flexShrink: 0 }}>{domain.emoji}</span>
+            <div style={{ flex: 1, minWidth: 0, fontSize: '.8rem', fontWeight: 600, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: isDone ? 'line-through' : 'none', color: isDone ? 'var(--muted)' : 'var(--text)' }}>{goal.label}</div>
+            <span style={{ fontSize: '.58rem', fontWeight: 800, color: isDone ? 'var(--muted)' : color, flexShrink: 0 }}>+{GOAL_XP[goal.type]}</span>
+            {socialEnabled && <button onClick={() => onPublicToggle(domain.id, goal.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.7rem', padding: '0 2px', color: goal.isPublic ? 'var(--teal)' : 'var(--muted)', opacity: 0.6, flexShrink: 0 }}>{goal.isPublic ? '👁' : '🔒'}</button>}
+            <button onClick={() => onDelete(domain.id, goal.id)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.2)', cursor: 'pointer', fontSize: '.9rem', padding: '0 1px', flexShrink: 0 }}>×</button>
+          </div>
+        ))}
       </div>
-
-      {/* Add button */}
       <div style={{ padding: '8px 14px' }}>
         <button onClick={tab === 'daily' ? onAddDaily : onAddWeekly} style={{ fontSize: '.76rem', color, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>+ Ajouter une quête</button>
       </div>
@@ -353,6 +395,7 @@ function CompactQuests({ dailyQuests, weeklyQuests, onToggle, onDelete, onAddDai
 
 // ─── Main view ────────────────────────────────────────────────────────────────
 export function ProfileView() {
+  const user             = useAppStore((s) => s.user);
   const appData          = useAppStore((s) => s.appData);
   const setDomains       = useAppStore((s) => s.setDomains);
   const toggleDomainPublic = useAppStore((s) => s.toggleDomainPublic);
@@ -361,25 +404,36 @@ export function ProfileView() {
   const socialEnabled    = !!appData?.social?.enabled;
   const [profileTab, setProfileTab] = useState<'quests' | 'history'>('quests');
 
+  // Followers count
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    getFriends(user.uid).then(f => setFriendCount(f.length)).catch(() => {});
+  }, [user]);
+
   // Add domain modal
-  const [showAddDomain, setShowAddDomain]   = useState(false);
-  const [newDomainName, setNewDomainName]   = useState('');
+  const [showAddDomain,  setShowAddDomain]  = useState(false);
+  const [newDomainName,  setNewDomainName]  = useState('');
   const [newDomainEmoji, setNewDomainEmoji] = useState('🎯');
 
   // Add goal modal
-  const [showGoalModal,      setShowGoalModal]      = useState(false);
+  const [showGoalModal,        setShowGoalModal]        = useState(false);
   const [addGoalPresetSection, setAddGoalPresetSection] = useState<GoalSection | null>(null);
-  const [newGoalLabel,   setNewGoalLabel]   = useState('');
-  const [newGoalType,    setNewGoalType]    = useState<GoalType>('daily');
-  const [newGoalDomainId, setNewGoalDomainId] = useState('');
+  const [newGoalLabel,         setNewGoalLabel]         = useState('');
+  const [newGoalType,          setNewGoalType]          = useState<GoalType>('daily');
+  const [newGoalDomainId,      setNewGoalDomainId]      = useState('');
 
-  // Radar comparison mode: 'current' | '7d' | '30d'
+  // Goal publish modal
+  const [publishGoal,    setPublishGoal]    = useState<{ goal: Goal; domain: Domain } | null>(null);
+  const [goalPublishMsg, setGoalPublishMsg] = useState('');
+  const [goalPublishing, setGoalPublishing] = useState(false);
+
+  // Radar comparison mode
   const [radarMode, setRadarMode] = useState<'current' | '7d' | '30d'>('current');
 
-  const domains       = appData?.domains ?? [];
-  const logs          = appData?.logs ?? [];
-  const allGoalsList  = useMemo(() => domains.flatMap(d => d.goals), [domains]);
-
+  const domains      = appData?.domains ?? [];
+  const logs         = appData?.logs ?? [];
+  const allGoalsList = useMemo(() => domains.flatMap(d => d.goals), [domains]);
   const allGoals     = useMemo(() => domains.flatMap(d => d.goals.map(g => ({ domain: d, goal: g, isDone: computeCurrentDone(g) }))), [domains]);
   const dailyQuests  = useMemo(() => allGoals.filter(q => q.goal.type === 'daily'),  [allGoals]);
   const weeklyQuests = useMemo(() => allGoals.filter(q => q.goal.type === 'weekly'), [allGoals]);
@@ -401,17 +455,26 @@ export function ProfileView() {
     return s;
   }, [logs]);
 
-  // Historical radar overlay (level-based, same scale as main radar)
   const radarOverlay = useMemo((): RadarOverlay | undefined => {
     if (radarMode === 'current' || domains.length < 3) return undefined;
     const daysAgo = radarMode === '7d' ? 7 : 30;
-    const scores = domains.map(d => computeHistoricalDomainLevel(d, daysAgo));
-    return { label: radarMode === '7d' ? 'Il y a 7j' : 'Il y a 30j', color: '#4aaeff', scores };
+    return { label: radarMode === '7d' ? 'Il y a 7j' : 'Il y a 30j', color: '#4aaeff', scores: domains.map(d => computeHistoricalDomainLevel(d, daysAgo)) };
   }, [radarMode, domains]);
 
-  // Toggle goal
   function toggleGoal(domainId: string, goalId: string) {
     const today = new Date().toISOString().split('T')[0];
+    const domain = domains.find(d => d.id === domainId);
+    const goal   = domain?.goals.find(g => g.id === goalId);
+
+    // Check if non-recurring goal is about to become done → show publish modal
+    if (goal && OBJECTIVE_TYPES.includes(goal.type)) {
+      const wasDone = computeCurrentDone(goal);
+      if (!wasDone) {
+        // Will become done — queue publish modal after state updates
+        setTimeout(() => setPublishGoal({ goal, domain: domain! }), 100);
+      }
+    }
+
     setDomains(domains.map((d) => {
       if (d.id !== domainId) return d;
       return {
@@ -427,20 +490,38 @@ export function ProfileView() {
     }));
   }
 
+  async function handlePublishGoal() {
+    if (!publishGoal || !user) return;
+    setGoalPublishing(true);
+    const authorName = appData?.social?.displayName ?? user.displayName ?? 'Anonyme';
+    await publishFeedPost({
+      authorUid: user.uid,
+      authorName,
+      type: 'goal',
+      goalLabel: publishGoal.goal.label,
+      goalEmoji: publishGoal.domain.emoji,
+      domainName: publishGoal.domain.name,
+      likes: [],
+      commentCount: 0,
+      createdAt: new Date().toISOString(),
+    }).catch(console.error);
+    setGoalPublishing(false);
+    setPublishGoal(null);
+    setGoalPublishMsg('');
+  }
+
   function deleteGoal(domainId: string, goalId: string) {
     setDomains(domains.map((d) => d.id === domainId ? { ...d, goals: d.goals.filter((g) => g.id !== goalId) } : d));
   }
   function deleteDomain(domainId: string) {
     setDomains(domains.filter((d) => d.id !== domainId));
   }
-
   function addDomain() {
     if (!newDomainName.trim()) return;
     const d: Domain = { id: crypto.randomUUID(), name: newDomainName.trim(), emoji: newDomainEmoji, goals: [], createdAt: new Date().toISOString() };
     setDomains([...domains, d]);
     setNewDomainName(''); setShowAddDomain(false);
   }
-
   function openAddGoal(section: GoalSection, domainId?: string) {
     setAddGoalPresetSection(section);
     setNewGoalType(section === 'daily' ? 'daily' : section === 'weekly' ? 'weekly' : 'short');
@@ -448,7 +529,6 @@ export function ProfileView() {
     setNewGoalLabel('');
     setShowGoalModal(true);
   }
-
   function addGoal() {
     if (!newGoalLabel.trim() || !newGoalDomainId) return;
     const goal: Goal = { id: crypto.randomUUID(), label: newGoalLabel.trim(), type: newGoalType, done: false, history: [], createdAt: new Date().toISOString() };
@@ -473,7 +553,7 @@ export function ProfileView() {
         ))}
       </div>
 
-      {profileTab === 'history' && <ActivityHistory />}
+      {profileTab === 'history' && <ActivityHistory uid={user?.uid} />}
       {profileTab === 'quests' && (
       <>
 
@@ -496,10 +576,10 @@ export function ProfileView() {
         </div>
         <div style={{ display: 'flex', gap: 0, borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 8 }}>
           {[
-            { val: streak, label: 'Streak', suffix: 'j', color: '#ff8c2a' },
-            { val: dailyQuests.filter(q => q.isDone).length, label: 'Jour', suffix: `/${dailyQuests.length}`, color: '#ff8c2a' },
-            { val: weeklyQuests.filter(q => q.isDone).length, label: 'Semaine', suffix: `/${weeklyQuests.length}`, color: '#a855f7' },
-            { val: domains.length, label: 'Domaines', suffix: '', color: 'var(--teal)' },
+            { val: streak,                                          label: 'Streak',  suffix: 'j',                       color: '#ff8c2a' },
+            { val: dailyQuests.filter(q => q.isDone).length,       label: 'Jour',    suffix: `/${dailyQuests.length}`,   color: '#ff8c2a' },
+            { val: weeklyQuests.filter(q => q.isDone).length,      label: 'Semaine', suffix: `/${weeklyQuests.length}`,  color: '#a855f7' },
+            { val: friendCount ?? '…',                             label: 'Amis',    suffix: '',                         color: 'var(--teal)' },
           ].map(({ val, label, suffix, color }, i) => (
             <div key={label} style={{ flex: 1, textAlign: 'center', borderRight: i < 3 ? '1px solid rgba(255,255,255,.06)' : 'none' }}>
               <div className="font-display" style={{ fontSize: '1.4rem', lineHeight: 1, color }}>
@@ -524,7 +604,6 @@ export function ProfileView() {
       <div style={{ margin: '4px 12px 8px', background: 'var(--s1)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
         <div style={{ padding: '12px 14px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
           <div className="font-display" style={{ fontSize: '1.1rem', flex: 1 }}>Profil</div>
-          {/* Radar comparison tabs */}
           <div style={{ display: 'flex', gap: 4 }}>
             {(['current', '7d', '30d'] as const).map(mode => (
               <button key={mode} onClick={() => setRadarMode(mode)} style={{ padding: '4px 8px', borderRadius: 6, border: radarMode === mode ? '1px solid var(--primary)' : '1px solid var(--border)', background: radarMode === mode ? 'rgba(200,16,46,.12)' : 'none', color: radarMode === mode ? 'var(--primary)' : 'var(--muted)', fontSize: '.6rem', fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '.04em' }}>
@@ -589,7 +668,6 @@ export function ProfileView() {
         );
       })}
 
-      {/* Domains with only daily/weekly goals — show inline add objective link */}
       {domains.filter(d => d.goals.every(g => !OBJECTIVE_TYPES.includes(g.type))).map(domain => (
         <div key={`obj-${domain.id}`} style={{ margin: '0 12px 4px', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: '.9rem' }}>{domain.emoji}</span>
@@ -609,6 +687,40 @@ export function ProfileView() {
         </div>
       )}
       </>
+      )}
+
+      {/* ── Goal publish modal ───────────────────────────────── */}
+      {publishGoal && (
+        <div className="overlay" onClick={e => { if (e.target === e.currentTarget) { setPublishGoal(null); setGoalPublishMsg(''); } }}>
+          <div className="sheet">
+            <div className="sheet-handle" />
+            <div style={{ textAlign: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: '2.5rem', marginBottom: 6 }}>🏆</div>
+              <div className="font-display" style={{ fontSize: '1.4rem', letterSpacing: '.08em', textTransform: 'uppercase' }}>Objectif atteint !</div>
+              <div style={{ fontSize: '.8rem', color: 'var(--muted)', marginTop: 4 }}>
+                {publishGoal.domain.emoji} {publishGoal.domain.name} · {GOAL_TYPE_META[publishGoal.goal.type].label}
+              </div>
+              <div style={{ fontSize: '.92rem', fontWeight: 700, marginTop: 6, color: 'var(--text)' }}>{publishGoal.goal.label}</div>
+            </div>
+
+            <div style={{ fontSize: '.7rem', color: 'var(--muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>Message (optionnel)</div>
+            <textarea
+              className="field"
+              placeholder="Partage ce moment, comment tu te sens..."
+              value={goalPublishMsg}
+              onChange={e => setGoalPublishMsg(e.target.value)}
+              rows={3}
+              style={{ marginBottom: 14, resize: 'none', fontFamily: 'inherit', fontSize: '.85rem' }}
+            />
+
+            <button className="btn-primary" onClick={handlePublishGoal} disabled={goalPublishing}>
+              {goalPublishing ? 'Publication...' : '🌐 Partager dans le feed'}
+            </button>
+            <button className="btn-secondary" style={{ marginTop: 6 }} onClick={() => { setPublishGoal(null); setGoalPublishMsg(''); }}>
+              Garder privé
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Sheet: Add Domain ──────────────────────────────────── */}

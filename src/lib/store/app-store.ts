@@ -7,7 +7,7 @@ import { Program } from '@/models/program';
 import { DayLog } from '@/models/day-log';
 import { Note } from '@/models/note';
 import { Domain, computeDomainScore } from '@/models/domain';
-import { GOAL_POINTS } from '@/models/goal';
+import { GOAL_POINTS, computeLevelInfo, computeTotalXP } from '@/models/goal';
 import { fetchAppData, saveAppData } from '@/lib/firebase/firestore';
 import { upsertPublicProfile } from '@/lib/firebase/social';
 import type { PublicProfileDoc } from '@/models/social';
@@ -203,7 +203,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             name: d.name,
             emoji: d.emoji,
             goalCount: d.goals.length,
-            score: Math.max(0, computeDomainScore(d)),
+            score: computeLevelInfo(computeTotalXP(d.goals)).level,
           }));
 
         // Public goals = goals with isPublic flag inside public domains

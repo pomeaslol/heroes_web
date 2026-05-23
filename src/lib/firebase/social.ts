@@ -285,9 +285,9 @@ const BOT_PROFILES: PublicProfileDoc[] = [
     bio: 'Ceinture bleue en BJJ, passionnée de force athlétique et de stoïcisme.',
     location: 'Paris, France',
     publicDomains: [
-      { name: 'BJJ', emoji: '🥋', goalCount: 3, score: 18 },
-      { name: 'Force', emoji: '💪', goalCount: 5, score: 32 },
-      { name: 'Mental', emoji: '🧠', goalCount: 2, score: 10 },
+      { name: 'BJJ', emoji: '🥋', goalCount: 3, score: 3 },
+      { name: 'Force', emoji: '💪', goalCount: 5, score: 4 },
+      { name: 'Mental', emoji: '🧠', goalCount: 2, score: 2 },
     ],
     publicGoals: [
       { label: 'Ceinture bleue BJJ', type: 'long', domainName: 'BJJ' },
@@ -305,8 +305,8 @@ const BOT_PROFILES: PublicProfileDoc[] = [
     bio: 'Runner du dimanche devenu accro. 3 semi-marathons au compteur.',
     location: 'Lyon, France',
     publicDomains: [
-      { name: 'Cardio', emoji: '🏃', goalCount: 4, score: 28 },
-      { name: 'Nutrition', emoji: '🥗', goalCount: 3, score: 15 },
+      { name: 'Cardio', emoji: '🏃', goalCount: 4, score: 3 },
+      { name: 'Nutrition', emoji: '🥗', goalCount: 3, score: 2 },
     ],
     publicGoals: [
       { label: 'Courir un marathon', type: 'long', domainName: 'Cardio' },
@@ -324,8 +324,8 @@ const BOT_PROFILES: PublicProfileDoc[] = [
     bio: 'Yoga, méditation et lecture. Je construis ma discipline un jour à la fois.',
     location: 'Bordeaux, France',
     publicDomains: [
-      { name: 'Mental', emoji: '🧠', goalCount: 4, score: 22 },
-      { name: 'Souplesse', emoji: '🧘', goalCount: 3, score: 14 },
+      { name: 'Mental', emoji: '🧠', goalCount: 4, score: 5 },
+      { name: 'Souplesse', emoji: '🧘', goalCount: 3, score: 3 },
     ],
     publicGoals: [
       { label: 'Grand écart complet', type: 'life', domainName: 'Souplesse' },
@@ -343,8 +343,8 @@ const BOT_PROFILES: PublicProfileDoc[] = [
     bio: 'Streetlifter et amateur de calisthenics. Objectif : muscle-up parfait.',
     location: 'Paris, France',
     publicDomains: [
-      { name: 'Force', emoji: '💪', goalCount: 6, score: 40 },
-      { name: 'Cardio', emoji: '🏃', goalCount: 2, score: 12 },
+      { name: 'Force', emoji: '💪', goalCount: 6, score: 5 },
+      { name: 'Cardio', emoji: '🏃', goalCount: 2, score: 2 },
     ],
     publicGoals: [
       { label: 'Muscle-up propre', type: 'medium', domainName: 'Force' },
@@ -362,9 +362,9 @@ const BOT_PROFILES: PublicProfileDoc[] = [
     bio: 'Ex-sédentaire reconvertie. La régularité avant la performance.',
     location: 'Marseille, France',
     publicDomains: [
-      { name: 'Force', emoji: '💪', goalCount: 3, score: 16 },
-      { name: 'Nutrition', emoji: '🥗', goalCount: 4, score: 20 },
-      { name: 'Souplesse', emoji: '🧘', goalCount: 2, score: 8 },
+      { name: 'Force', emoji: '💪', goalCount: 3, score: 3 },
+      { name: 'Nutrition', emoji: '🥗', goalCount: 4, score: 3 },
+      { name: 'Souplesse', emoji: '🧘', goalCount: 2, score: 2 },
     ],
     publicGoals: [
       { label: 'Squatter mon poids de corps', type: 'medium', domainName: 'Force' },
