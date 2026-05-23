@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore } from '@/lib/store/app-store';
-import { searchUsers, getFriends, sendFriendRequest } from '@/lib/firebase/social';
-import { loadFeedPosts, toggleLike, addComment, loadComments } from '@/lib/firebase/feed';
+import { searchUsers, getFriends, sendFriendRequest, getPublicProfile } from '@/lib/firebase/social';
+import { loadFeedPosts, toggleLike, addComment, loadComments, deleteFeedPost } from '@/lib/firebase/feed';
 import type { Friend, PublicProfileDoc } from '@/models/social';
 import type { FeedPost, FeedComment } from '@/models/feed';
 import { DayLog } from '@/models/day-log';
@@ -19,7 +19,17 @@ const MACRO_FILTERS = [
 
 // ─── Friend Profile (full-screen) ────────────────────────────────────────────
 function FriendProfileModal({ friend, onClose }: { friend: Friend; onClose: () => void }) {
-  const domains = friend.publicDomains ?? [];
+  const [profile, setProfile] = useState<PublicProfileDoc | null>(null);
+  useEffect(() => {
+    getPublicProfile(friend.uid).then(p => setProfile(p)).catch(() => {});
+  }, [friend.uid]);
+
+  const domains = profile?.publicDomains ?? friend.publicDomains ?? [];
+  const bio      = profile?.bio      ?? (friend as any).bio;
+  const location = profile?.location ?? (friend as any).location;
+  const streak   = profile?.streak   ?? friend.streak;
+  const totalPoints = profile?.totalPoints ?? friend.totalPoints;
+
   const n = domains.length;
   const showRadar = n >= 3;
   const cx = 140, cy = 130, r = 95;
@@ -36,8 +46,8 @@ function FriendProfileModal({ friend, onClose }: { friend: Friend; onClose: () =
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '1.2rem', padding: 0 }}>←</button>
         <div style={{ flex: 1, fontWeight: 700, fontSize: '.9rem', textTransform: 'uppercase', letterSpacing: '.06em' }}>{friend.displayName}</div>
         <div style={{ display: 'flex', gap: 10 }}>
-          {(friend.streak ?? 0) > 0 && <span style={{ fontSize: '.72rem', color: '#ff8c2a', fontWeight: 700 }}>🔥 {friend.streak}j</span>}
-          {(friend.totalPoints ?? 0) > 0 && <span style={{ fontSize: '.72rem', color: 'var(--teal)', fontWeight: 700 }}>⚡ {friend.totalPoints}</span>}
+          {(streak ?? 0) > 0 && <span style={{ fontSize: '.72rem', color: '#ff8c2a', fontWeight: 700 }}>🔥 {streak}j</span>}
+          {(totalPoints ?? 0) > 0 && <span style={{ fontSize: '.72rem', color: 'var(--teal)', fontWeight: 700 }}>⚡ {totalPoints}</span>}
         </div>
       </div>
 
@@ -48,8 +58,8 @@ function FriendProfileModal({ friend, onClose }: { friend: Friend; onClose: () =
           </div>
           <div>
             <div className="font-display" style={{ fontSize: '1.6rem', letterSpacing: '.08em', lineHeight: 1.1 }}>{friend.displayName}</div>
-            {(friend as any).location && <div style={{ fontSize: '.72rem', color: 'var(--muted)', marginTop: 4 }}>📍 {(friend as any).location}</div>}
-            {(friend as any).bio && <div style={{ fontSize: '.78rem', color: 'var(--muted2)', marginTop: 6, lineHeight: 1.5 }}>{(friend as any).bio}</div>}
+            {location && <div style={{ fontSize: '.72rem', color: 'var(--muted)', marginTop: 4 }}>📍 {location}</div>}
+            {bio && <div style={{ fontSize: '.78rem', color: 'var(--muted2)', marginTop: 6, lineHeight: 1.5 }}>{bio}</div>}
           </div>
         </div>
 
@@ -84,7 +94,9 @@ function FriendProfileModal({ friend, onClose }: { friend: Friend; onClose: () =
               </div>
             </div>
           ) : (
-            <div style={{ padding: '20px 16px', fontSize: '.78rem', color: 'var(--muted)', textAlign: 'center' }}>Aucun domaine public partagé</div>
+            <div style={{ padding: '20px 16px', fontSize: '.78rem', color: 'var(--muted)', textAlign: 'center' }}>
+              {profile === null && domains.length === 0 ? 'Chargement...' : 'Aucun domaine public partagé'}
+            </div>
           )}
         </div>
 
@@ -190,11 +202,15 @@ function FeedCard({
   myUid,
   onLike,
   onOpenDetail,
+  onDelete,
+  onOpenProfile,
 }: {
   post: FeedPost;
   myUid: string;
   onLike: (post: FeedPost) => void;
   onOpenDetail: (log: DayLog) => void;
+  onDelete: (postId: string) => void;
+  onOpenProfile: (uid: string, name: string) => void;
 }) {
   const [showComments, setShowComments]   = useState(false);
   const [comments,     setComments]       = useState<FeedComment[]>([]);
@@ -252,18 +268,30 @@ function FeedCard({
     <div className="card" style={{ margin: '0 12px 10px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 8px' }}>
-        <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(200,16,46,.15)', border: '1.5px solid rgba(200,16,46,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.95rem', fontWeight: 800, color: 'var(--primary)', flexShrink: 0 }}>
+        <button
+          onClick={() => post.authorUid !== myUid && onOpenProfile(post.authorUid, post.authorName)}
+          style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(200,16,46,.15)', border: '1.5px solid rgba(200,16,46,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '.95rem', fontWeight: 800, color: 'var(--primary)', flexShrink: 0, cursor: post.authorUid !== myUid ? 'pointer' : 'default', padding: 0 }}
+        >
           {post.authorName[0]?.toUpperCase()}
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: '.82rem' }}>{post.authorName}</div>
+        </button>
+        <button
+          onClick={() => post.authorUid !== myUid && onOpenProfile(post.authorUid, post.authorName)}
+          style={{ flex: 1, background: 'none', border: 'none', padding: 0, textAlign: 'left', cursor: post.authorUid !== myUid ? 'pointer' : 'default' }}
+        >
+          <div style={{ fontWeight: 700, fontSize: '.82rem', color: 'var(--text)' }}>{post.authorName}</div>
           <div style={{ fontSize: '.6rem', color: 'var(--muted)' }}>{timeAgo}</div>
-        </div>
+        </button>
         {log && (
           <div style={{ width: 32, height: 32, borderRadius: 8, background: `${log.programColor}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>{log.programIcon}</div>
         )}
         {post.type === 'goal' && (
           <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(251,191,36,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>{post.goalEmoji ?? '🏆'}</div>
+        )}
+        {post.authorUid === myUid && (
+          <button
+            onClick={() => onDelete(post.id)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '.75rem', padding: '3px 5px', color: 'rgba(255,255,255,.2)', flexShrink: 0 }}
+          >🗑</button>
         )}
       </div>
 
@@ -275,10 +303,17 @@ function FeedCard({
           </div>
         )}
         {post.type === 'goal' && post.goalLabel && (
-          <div style={{ fontWeight: 700, fontSize: '.9rem', marginBottom: 2 }}>
-            🏆 {post.goalLabel}
-            {post.domainName && <span style={{ fontSize: '.7rem', color: 'var(--muted)', fontWeight: 400, marginLeft: 6 }}>· {post.domainName}</span>}
-          </div>
+          <>
+            <div style={{ fontWeight: 700, fontSize: '.9rem', marginBottom: 2 }}>
+              🏆 {post.goalLabel}
+              {post.domainName && <span style={{ fontSize: '.7rem', color: 'var(--muted)', fontWeight: 400, marginLeft: 6 }}>· {post.domainName}</span>}
+            </div>
+            {post.note && (
+              <div style={{ fontSize: '.78rem', color: 'var(--muted2)', lineHeight: 1.45, fontStyle: 'italic', marginTop: 2 }}>
+                "{post.note}"
+              </div>
+            )}
+          </>
         )}
         {exoNames.length > 0 && (
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -376,8 +411,9 @@ function FeedCard({
 
 // ─── Main HomeView ────────────────────────────────────────────────────────────
 export function HomeView() {
-  const user    = useAppStore(s => s.user);
-  const appData = useAppStore(s => s.appData);
+  const user        = useAppStore(s => s.user);
+  const appData     = useAppStore(s => s.appData);
+  const currentView = useAppStore(s => s.currentView);
 
   const [showSearch,     setShowSearch]     = useState(false);
   const [searchQuery,    setSearchQuery]    = useState('');
@@ -400,9 +436,10 @@ export function HomeView() {
   // Store name globally so FeedCard comment author can access it
   useEffect(() => { (window as any).__heroMyName = myName; }, [myName]);
 
-  // Load friends + feed on mount
+  // Reload friends + feed every time user switches to home tab
   useEffect(() => {
-    if (!user) return;
+    if (!user || currentView !== 'home') return;
+    setLoadingFeed(true);
     getFriends(user.uid)
       .then(async (f) => {
         setFriends(f);
@@ -413,7 +450,7 @@ export function HomeView() {
       })
       .catch(() => setLoadingFeed(false));
     searchUsers('').then(r => setSuggestions(r.slice(0, 6))).catch(console.error);
-  }, [user]);
+  }, [user, currentView]);
 
   // Live search
   useEffect(() => {
@@ -435,6 +472,16 @@ export function HomeView() {
       setRequestsSent(s => new Set(s).add(uid));
     } catch {}
     setSendingReq(s => { const ns = new Set(s); ns.delete(uid); return ns; });
+  }
+
+  function handleDeletePost(postId: string) {
+    setFeedPosts(prev => prev.filter(p => p.id !== postId));
+    deleteFeedPost(postId).catch(console.error);
+  }
+
+  function handleOpenProfile(uid: string, name: string) {
+    const existing = friends.find(f => f.uid === uid);
+    setViewingFriend(existing ?? { uid, displayName: name, since: '' });
   }
 
   function handleLike(post: FeedPost) {
@@ -603,6 +650,8 @@ export function HomeView() {
           myUid={user?.uid ?? ''}
           onLike={handleLike}
           onOpenDetail={(log) => setSelectedLog(log)}
+          onDelete={handleDeletePost}
+          onOpenProfile={handleOpenProfile}
         />
       ))}
 

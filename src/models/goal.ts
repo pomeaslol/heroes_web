@@ -14,6 +14,7 @@ export interface Goal {
   createdAt: string;
   note?: string;
   isPublic?: boolean;
+  feedPostId?: string;
 }
 
 export const GOAL_POINTS: Record<GoalType, number> = {

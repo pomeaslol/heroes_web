@@ -466,12 +466,15 @@ export function ProfileView() {
     const domain = domains.find(d => d.id === domainId);
     const goal   = domain?.goals.find(g => g.id === goalId);
 
-    // Check if non-recurring goal is about to become done → show publish modal
+    // Non-recurring goal toggle
     if (goal && OBJECTIVE_TYPES.includes(goal.type)) {
       const wasDone = computeCurrentDone(goal);
       if (!wasDone) {
         // Will become done — queue publish modal after state updates
         setTimeout(() => setPublishGoal({ goal, domain: domain! }), 100);
+      } else if (goal.feedPostId) {
+        // Being un-done — remove the feed post and clear feedPostId
+        deleteFeedPost(goal.feedPostId).catch(console.error);
       }
     }
 
@@ -484,7 +487,7 @@ export function ProfileView() {
           const done = !currentDone;
           const history = g.history.filter((h) => h.date !== today);
           if (g.type === 'daily' || g.type === 'weekly') return { ...g, history: [...history, { date: today, done }] };
-          return { ...g, done, history: [...history, { date: today, done }] };
+          return { ...g, done, history: [...history, { date: today, done }], feedPostId: done ? g.feedPostId : undefined };
         }),
       };
     }));
@@ -494,17 +497,29 @@ export function ProfileView() {
     if (!publishGoal || !user) return;
     setGoalPublishing(true);
     const authorName = appData?.social?.displayName ?? user.displayName ?? 'Anonyme';
-    await publishFeedPost({
-      authorUid: user.uid,
-      authorName,
-      type: 'goal',
-      goalLabel: publishGoal.goal.label,
-      goalEmoji: publishGoal.domain.emoji,
-      domainName: publishGoal.domain.name,
-      likes: [],
-      commentCount: 0,
-      createdAt: new Date().toISOString(),
-    }).catch(console.error);
+    try {
+      const postId = await publishFeedPost({
+        authorUid: user.uid,
+        authorName,
+        type: 'goal',
+        goalLabel: publishGoal.goal.label,
+        goalEmoji: publishGoal.domain.emoji,
+        domainName: publishGoal.domain.name,
+        note: goalPublishMsg.trim() || undefined,
+        likes: [],
+        commentCount: 0,
+        createdAt: new Date().toISOString(),
+      });
+      // Store feedPostId on the goal so we can delete it if unchecked
+      setDomains(domains.map(d =>
+        d.id !== publishGoal.domain.id ? d : {
+          ...d,
+          goals: d.goals.map(g => g.id !== publishGoal.goal.id ? g : { ...g, feedPostId: postId }),
+        }
+      ));
+    } catch (e) {
+      console.error(e);
+    }
     setGoalPublishing(false);
     setPublishGoal(null);
     setGoalPublishMsg('');

@@ -19,6 +19,7 @@ export interface FeedPost {
   goalLabel?: string;
   goalEmoji?: string;
   domainName?: string;
+  note?: string;
   // engagement
   likes: string[];
   commentCount: number;
