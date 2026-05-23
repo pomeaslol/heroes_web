@@ -53,6 +53,25 @@ service cloud.firestore {
       allow delete: if request.auth != null && request.auth.uid == toUid;
     }
 
+    // Feed posts — public read; any auth user can create (enables bot seeding);
+    // any auth user can update (enables likes by anyone); author can delete
+    match /feed_posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null
+        && request.auth.uid == resource.data.authorUid;
+
+      // Comments — public read, any auth user can create, author can delete
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.auth != null;
+        allow delete: if request.auth != null
+          && request.auth.uid == resource.data.authorUid;
+        allow update: if false;
+      }
+    }
+
     // Groups — publicly readable, authenticated users can create/update
     match /groups/{groupId} {
       allow read: if true;

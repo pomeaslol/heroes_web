@@ -12,7 +12,7 @@ import { fetchAppData, saveAppData } from '@/lib/firebase/firestore';
 import { upsertPublicProfile } from '@/lib/firebase/social';
 import type { PublicProfileDoc } from '@/models/social';
 
-type View = 'profile' | 'programs' | 'calendar' | 'notes' | 'social';
+type View = 'home' | 'workout' | 'profile';
 
 interface AppStore {
   user: User | null;
@@ -37,6 +37,7 @@ interface AppStore {
 
   // Logs
   addLog: (log: DayLog) => void;
+  updateLog: (id: string, partial: Partial<DayLog>) => void;
   deleteLog: (id: string) => void;
 
   // Notes
@@ -54,7 +55,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   appData: null,
   loading: true,
   syncError: null,
-  currentView: 'profile',
+  currentView: 'home',
 
   setUser: (user) => {
     set({ user });
@@ -131,6 +132,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { appData } = get();
     if (!appData) return;
     get().updateAppData({ logs: [...appData.logs, log] });
+  },
+
+  updateLog: (id, partial) => {
+    const { appData } = get();
+    if (!appData) return;
+    get().updateAppData({ logs: appData.logs.map((l) => l.id === id ? { ...l, ...partial } : l) });
   },
 
   deleteLog: (id) => {

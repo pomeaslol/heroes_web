@@ -24,6 +24,8 @@ import type {
   GroupMessage,
   GroupInvitation,
 } from '@/models/social';
+import type { FeedPost } from '@/models/feed';
+import type { DayLog } from '@/models/day-log';
 
 function clean<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
@@ -373,6 +375,142 @@ const BOT_PROFILES: PublicProfileDoc[] = [
   },
 ];
 
+// Bot feed posts — realistic sessions to populate the unified feed
+function makeBotLog(
+  id: string,
+  programId: string,
+  programName: string,
+  programIcon: string,
+  programColor: string,
+  programCategory: string,
+  daysAgo: number,
+  blocks: DayLog['blocks'],
+  note?: string
+): DayLog {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  const dateStr = d.toISOString().split('T')[0];
+  return {
+    id,
+    date: dateStr,
+    programId,
+    programName,
+    programIcon,
+    programColor,
+    programCategory,
+    blocks,
+    completedAt: d.toISOString(),
+    note,
+    isPublic: true,
+  };
+}
+
+const BOT_LOGS: Record<string, DayLog[]> = {
+  bot_alice_001: [
+    makeBotLog('al1', 'prog_alice_force', 'Squat & Bench', '🏋️', '#C8102E', 'sport', 1, [
+      {
+        blockId: 'b1', title: 'Force',
+        items: [
+          { itemId: 'i1', name: 'Squat', done: true, isPublic: true, sets: [{ w: 100, r: 5, done: true }, { w: 100, r: 5, done: true }, { w: 105, r: 3, done: true }, { w: 105, r: 3, done: true }, { w: 110, r: 2, done: true }] },
+          { itemId: 'i2', name: 'Développé couché', done: true, isPublic: true, sets: [{ w: 72.5, r: 5, done: true }, { w: 72.5, r: 5, done: true }, { w: 75, r: 4, done: true }, { w: 75, r: 3, done: true }] },
+          { itemId: 'i3', name: 'Overhead Press', done: true, isPublic: true, sets: [{ w: 52.5, r: 6, done: true }, { w: 52.5, r: 5, done: true }, { w: 55, r: 4, done: true }] },
+        ],
+      },
+    ], 'Nouvelle PR au squat 🔥 110kg x2 !'),
+    makeBotLog('al2', 'prog_alice_bjj', 'Entraînement BJJ', '🥋', '#4aaeff', 'sport', 4, [
+      {
+        blockId: 'b2', title: 'Technique',
+        items: [
+          { itemId: 'i4', name: 'Drilling guard passé', done: true, isPublic: true },
+          { itemId: 'i5', name: 'Sparring 5×5 min', done: true, isPublic: true },
+        ],
+      },
+    ], '2h de drilling, je sens le progrès sur la garde ouverte.'),
+  ],
+  bot_thomas_002: [
+    makeBotLog('th1', 'prog_thomas_run', 'Running endurance', '🏃', '#ff8c2a', 'sport', 2, [
+      {
+        blockId: 'b3', title: 'Sortie',
+        items: [
+          { itemId: 'i6', name: 'Course 10km', done: true, isPublic: true, duration: 52 },
+          { itemId: 'i7', name: 'Étirements', done: true, isPublic: true, duration: 10 },
+        ],
+      },
+    ], '52 min sur le 10km, objectif sous 50 min bientôt 💪'),
+    makeBotLog('th2', 'prog_thomas_run2', 'Fractionné 5×1000m', '🏃', '#ff8c2a', 'sport', 6, [
+      {
+        blockId: 'b4', title: 'Intervalles',
+        items: [
+          { itemId: 'i8', name: '5×1000m à allure seuil', done: true, isPublic: true, duration: 40 },
+        ],
+      },
+    ], 'Dur mais efficace. Moyenne 4:05/km sur les séries.'),
+  ],
+  bot_sofia_003: [
+    makeBotLog('sf1', 'prog_sofia_yoga', 'Yoga morning', '🧘', '#a855f7', 'wellbeing', 1, [
+      {
+        blockId: 'b5', title: 'Practice',
+        items: [
+          { itemId: 'i9', name: 'Flow vinyasa 45min', done: true, isPublic: true, duration: 45 },
+          { itemId: 'i10', name: 'Méditation', done: true, isPublic: true, duration: 15 },
+        ],
+      },
+    ], 'Un mois sans manquer un matin. La constance est tout 🙏'),
+    makeBotLog('sf2', 'prog_sofia_yoga2', 'Yin yoga & stretching', '🧘', '#a855f7', 'wellbeing', 5, [
+      {
+        blockId: 'b6', title: 'Souplesse',
+        items: [
+          { itemId: 'i11', name: 'Pigeon pose 3min/côté', done: true, isPublic: true },
+          { itemId: 'i12', name: 'Grand écart progressif', done: true, isPublic: true },
+        ],
+      },
+    ]),
+  ],
+  bot_maxime_004: [
+    makeBotLog('mx1', 'prog_maxime_cal', 'Calisthenics', '💪', '#3fffc0', 'sport', 1, [
+      {
+        blockId: 'b7', title: 'Pull & Push',
+        items: [
+          { itemId: 'i13', name: 'Tractions lestées +20kg', done: true, isPublic: true, sets: [{ w: 20, r: 6, done: true }, { w: 20, r: 5, done: true }, { w: 20, r: 5, done: true }, { w: 20, r: 4, done: true }] },
+          { itemId: 'i14', name: 'Dips lestés +25kg', done: true, isPublic: true, sets: [{ w: 25, r: 8, done: true }, { w: 25, r: 8, done: true }, { w: 25, r: 6, done: true }] },
+          { itemId: 'i15', name: 'Muscle-up', done: true, isPublic: true, sets: [{ r: 3, done: true }, { r: 3, done: true }, { r: 2, done: true }] },
+        ],
+      },
+    ], 'Muscle-up de plus en plus propre. +30kg de lest aux tractions cet été 🎯'),
+    makeBotLog('mx2', 'prog_maxime_cal2', 'Handstand & Core', '💪', '#3fffc0', 'sport', 4, [
+      {
+        blockId: 'b8', title: 'Skills',
+        items: [
+          { itemId: 'i16', name: 'Handstand wall hold 3×45s', done: true, isPublic: true },
+          { itemId: 'i17', name: 'Dragon flag 3×6', done: true, isPublic: true },
+          { itemId: 'i18', name: 'L-sit 3×20s', done: true, isPublic: true },
+        ],
+      },
+    ]),
+  ],
+  bot_lea_005: [
+    makeBotLog('le1', 'prog_lea_force', 'Squat & Deadlift', '💪', '#fbbf24', 'sport', 3, [
+      {
+        blockId: 'b9', title: 'Compound',
+        items: [
+          { itemId: 'i19', name: 'Squat', done: true, isPublic: true, sets: [{ w: 75, r: 5, done: true }, { w: 75, r: 5, done: true }, { w: 80, r: 3, done: true }, { w: 80, r: 3, done: true }] },
+          { itemId: 'i20', name: 'Soulevé de terre', done: true, isPublic: true, sets: [{ w: 100, r: 4, done: true }, { w: 100, r: 4, done: true }, { w: 105, r: 2, done: true }] },
+          { itemId: 'i21', name: 'Hip thrust', done: true, isPublic: true, sets: [{ w: 90, r: 10, done: true }, { w: 90, r: 10, done: true }, { w: 90, r: 8, done: true }] },
+        ],
+      },
+    ], 'Squat au poids de corps atteint 🎉 80kg × 3 !'),
+    makeBotLog('le2', 'prog_lea_nutrition', 'Bilan nutrition', '🥗', '#22c55e', 'nutrition', 6, [
+      {
+        blockId: 'b10', title: 'Suivi',
+        items: [
+          { itemId: 'i22', name: 'Macro tracking fait', done: true, isPublic: true },
+          { itemId: 'i23', name: '2L d\'eau atteints', done: true, isPublic: true },
+        ],
+      },
+    ], 'Semaine 3 de suivi macro — 145g protéines/j en moyenne 💪'),
+  ],
+};
+
 export async function seedBotFriends(myUid: string, myName: string): Promise<void> {
   const batch = writeBatch(db);
   const now = new Date().toISOString();
@@ -392,7 +530,7 @@ export async function seedBotFriends(myUid: string, myName: string): Promise<voi
     };
     batch.set(doc(db, 'friendships', myUid, 'list', bot.uid), clean(myFriendEntry));
 
-    // Write reverse friendship (bot → me), allowed because request.auth.uid == friendUid == myUid
+    // Write reverse friendship (bot → me)
     const reverseFriendEntry: Friend = {
       uid: myUid,
       displayName: myName,
@@ -402,6 +540,27 @@ export async function seedBotFriends(myUid: string, myName: string): Promise<voi
   }
 
   await batch.commit();
+
+  // Write bot feed posts in a second pass (separate batch to stay under 500 op limit)
+  const postBatch = writeBatch(db);
+  for (const [botUid, logs] of Object.entries(BOT_LOGS)) {
+    const bot = BOT_PROFILES.find(b => b.uid === botUid)!;
+    for (const log of logs) {
+      const postRef = doc(collection(db, 'feed_posts'));
+      const post: FeedPost = {
+        id: postRef.id,
+        authorUid: botUid,
+        authorName: bot.displayName,
+        type: 'session',
+        log,
+        likes: [],
+        commentCount: 0,
+        createdAt: log.completedAt ?? log.date,
+      };
+      postBatch.set(postRef, clean(post));
+    }
+  }
+  await postBatch.commit();
 }
 
 // ─── Group Messages ───────────────────────────────────────────────────────────
